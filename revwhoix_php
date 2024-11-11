@@ -1,0 +1,71 @@
+#!/usr/bin/php
+<?php
+
+// Verificar se estamos no modo CLI
+if (php_sapi_name() !== 'cli') {
+    echo "Este script deve ser executado na linha de comando.\n";
+    exit(1);
+}
+
+// Função para pegar os parâmetros da linha de comando
+function getCommandLineArgs() {
+    global $argv, $argc;
+
+    // Verifica se foi passado o parâmetro correto
+    if ($argc < 3) {
+        echo "Usage: php script.php <apiToken> <include>\n";
+        exit(1);
+    }
+
+    // Extrai o apiToken e o include
+    $apiToken = $argv[1];
+    $include = explode(";", $argv[2]); // Divide o valor de "include" pelo separador ";"
+    
+    return [$apiToken, $include];
+}
+
+// Função para fazer a requisição HTTP usando cURL
+function makePostRequest($url, $data) {
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+        'Content-Type: application/json',
+        'Accept: application/json'
+    ));
+    $response = curl_exec($ch);
+    curl_close($ch);
+    return json_decode($response, true);
+}
+
+// Recebe os parâmetros da linha de comando
+list($apiToken, $include) = getCommandLineArgs();
+
+// Endpoint da API e Token de Autenticação
+$baseUrl = 'https://reverse-whois.whoisxmlapi.com/api/v2';
+
+// Parâmetros de consulta para busca
+$data = array(
+    'apiKey' => $apiToken,
+    'searchType' => 'current',
+    'mode' => 'purchase',
+    'punycode' => true,
+    'basicSearchTerms' => array(
+        'include' => $include
+    )
+);
+
+// Fazer a requisição POST
+$response = makePostRequest($baseUrl, $data);
+
+// Exibir apenas os domínios
+if (isset($response['domainsList'])) {
+    foreach ($response['domainsList'] as $domain) {
+        echo $domain . "\n";
+    }
+} else {
+    echo "Nenhum domínio encontrado na resposta.\n";
+}
+
+?>
