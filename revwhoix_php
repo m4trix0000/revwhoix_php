@@ -1,4 +1,4 @@
-#!/usr/bin/php
+!/usr/bin/php
 <?php
 
 // Verificar se estamos no modo CLI
@@ -13,19 +13,23 @@ function getCommandLineArgs() {
 
     // Verifica se foi passado o parâmetro correto
     if ($argc < 3) {
-        echo "Usage: php script.php <apiToken> <include>\n";
+        echo "Usage: php script.php <apiTokens> <include> [ignoreTerms]\n";
         exit(1);
     }
 
-    // Extrai o apiToken e o include
-    $apiToken = $argv[1];
-    $include = explode(";", $argv[2]); // Divide o valor de "include" pelo separador ";"
-    
-    return [$apiToken, $include];
+    // Extrai os apiTokens e o include
+    $apiTokens = explode(",", $argv[1]); // Vários tokens separados por vírgula
+    $include = $argv[2]; // Apenas um termo de busca permitido
+
+    // Extrai os termos a serem ignorados (opcional)
+    $ignoreTerms = array_slice($argv, 3);
+
+    return [$apiTokens, $include, $ignoreTerms];
 }
 
 // Função para fazer a requisição HTTP usando cURL
-function makePostRequest($url, $data) {
+function makePostRequest($url, $data, $apiToken) {
+    $data['apiKey'] = $apiToken; // Inclui o token na requisição
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
@@ -40,29 +44,43 @@ function makePostRequest($url, $data) {
 }
 
 // Recebe os parâmetros da linha de comando
-list($apiToken, $include) = getCommandLineArgs();
+list($apiTokens, $include, $ignoreTerms) = getCommandLineArgs();
 
-// Endpoint da API e Token de Autenticação
+// Endpoint da API
 $baseUrl = 'https://reverse-whois.whoisxmlapi.com/api/v2';
 
 // Parâmetros de consulta para busca
 $data = array(
-    'apiKey' => $apiToken,
     'searchType' => 'current',
     'mode' => 'purchase',
     'punycode' => true,
     'basicSearchTerms' => array(
-        'include' => $include
+        'include' => [$include]
     )
 );
 
-// Fazer a requisição POST
-$response = makePostRequest($baseUrl, $data);
+// Tenta cada apiToken até obter uma resposta válida
+$response = null;
+foreach ($apiTokens as $apiToken) {
+    $response = makePostRequest($baseUrl, $data, $apiToken);
+    if (isset($response['domainsList'])) {
+        break; // Sai do loop se obtiver uma resposta válida
+    }
+}
 
-// Exibir apenas os domínios
+// Exibir apenas os domínios que não contêm termos ignorados
 if (isset($response['domainsList'])) {
     foreach ($response['domainsList'] as $domain) {
-        echo $domain . "\n";
+        $ignore = false;
+        foreach ($ignoreTerms as $term) {
+            if (stripos($domain, $term) !== false) {
+                $ignore = true;
+                break;
+            }
+        }
+        if (!$ignore) {
+            echo $domain . "\n";
+        }
     }
 } else {
     echo "Nenhum domínio encontrado na resposta.\n";
